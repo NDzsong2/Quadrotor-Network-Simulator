@@ -4,18 +4,22 @@ classdef Formation < handle
     
     properties
         % Indices
-        formationIndex            % k
+        formationIndex        % k
         
         % parameters
-        numOfQuadrotors           % n
+        numOfQuadrotors       % n
         
-        quadrotors = []           % this array holds all the quadrotor class objects created. 
+        quadrotors = []       % this array holds all the quadrotor class objects created. 
         topology
        
         graphics1 = []
         graphics2 = []
 
-        K                         % controller gains obtained 
+        R
+        varepsilon = []
+
+        % K sequence (controller gains obtained)
+        KSequence
     end
     
     methods
@@ -27,24 +31,101 @@ classdef Formation < handle
             
             % Create quadrotors in a formation
             quadrotors = [];
-            for i = 1:1:n_k
+            vareps = [];
+            for i = 1:1:n_k 
                 % Create an object from the Quadrotor class
-                quadrotor = Quadrotor(k,i,parameters(:,i),states(:,i),desiredSeparation(:,i),noiseMean(:,i),noiseStd(:,i));
+                quadrotor = Quadrotor(k,i,parameters(:,i),states(:,i),desiredSeparation(:,i),noiseMean(:,i),noiseStd(:,i), n_k); % The last one is the total number of quadrotors.
+                vareps = [vareps, parameters(7,i)];
                 quadrotors = [quadrotors, quadrotor];
             end
             obj.quadrotors = quadrotors;
+            obj.varepsilon = vareps;     % A set of all varepsilon_i for all quadrotors
 
-            % obj.topology = Topology(n_k); % Generate a topology
-            obj.updateNeighbors();   % update the neighbor information of each quadrotor object inside obj.quadrotors based on obj.topology
-            % obj.loadDefaultControllerGains(); % based on the neighbor connections, load some controller gains
+            obj.topology = Topology(n_k);     % Generate the topology
+            obj.updateNeighbors();            % update the neighbor information of each quadrotor object inside obj.quadrotors based on obj.topology
+            obj.loadDefaultControllerGains(); % based on the neighbor connections, load some controller gains
 
         end
         
+        
+        %% Update the Neighboring Set of Quadrotors and Topologies
+        function outputArg = updateNeighbors(obj)
+            for i = 1:1:obj.numOfQuadrotors
+                obj.quadrotors(i).inNeighbors = obj.topology.inNeighbors{i};
+                obj.quadrotors(i).outNeighbors = obj.topology.outNeighbors{i};
 
- 
+                desiredSeperations = []; % store d_ij values
+                for j = 1:1:obj.numOfQuadrotors
+                    d_ij = obj.quadrotors(i).desiredSeparation - obj.quadrotors(j).desiredSeparation;
+                    desiredSeperations = [desiredSeperations, d_ij];
+                end
+                obj.quadrotors(i).desiredSeparations = desiredSeperations;
+            end
+        end
+
+        
+
+        %% Load the Local Controller Gains and Passivity Properties
+        function outputArg = loadDefaultControllerGains(obj)
+            for i = 2:1:obj.numOfQuadrotors                    
+
+                % In error dynamics formulation - II  
+                I = eye(3);
+                O = zeros(3);
+                e3 = [0 0 1]';
+                
+                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                % Here, we need to change the controller parameters as in (16)
+                l11 = 20;
+                l12 = 20;
+                % l13 = 0;
+                % l14 = 0;
+                % l21 = 0;
+                % l22 = 0;
+                % l23 = 5/(obj.varepsilon(i)^2);
+                % l24 = 5/(obj.varepsilon(i));
+                
+                % L_ii = -[l11*I l12*I l13*I l14*I;
+                %          l21*I l22*I l23*I l24*I];
+                % L_ii = [5.31*I 3.34*I -3.7*(hatmap(e3))^2 -0.8*(hatmap(e3))^2;
+                %     -0.0157*(hatmap(e3))^2 -0.0045*(hatmap(e3))^2 39.4*I 23.3*I];
+                L_ii = -[l11*I l12*I];
+                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                obj.quadrotors(i).localControllerGains2 = L_ii/2;
+                obj.quadrotors(i).controllerGains2{i} = L_ii/2;
+
+                for jInd = 1:1:length(obj.quadrotors(i).inNeighbors)
+                    j = obj.quadrotors(i).inNeighbors(jInd);
+                    
+                    % In error dynamics formulation - II, these are L_{ij} values
+                    % L_{ij}\in\R^3 and exist for all j\in\N_N/{i}   
+                    if j ~= 1  
+                    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                    %     L_ij = -[l11*I l12*I l13*I l14*I;
+                    %              l21*I l22*I l23*I l24*I];
+                    %     L_ij = [5.31*I 3.34*I -3.7*(hatmap(e3))^2 -0.8*(hatmap(e3))^2;
+                    %        -0.0157*(hatmap(e3))^2 -0.0045*(hatmap(e3))^2 39.4*I 23.3*I];
+                    L_ij = -[l11*I l12*I];
+                    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                        obj.quadrotors(i).controllerGains2{j} = L_ij;
+                    end                   
+
+                end
+            end
+        end
 
 
-        function outputArg = drawFormation(obj,figNum)
+
+        function outputArg = loadPassivityIndices(obj,nuVals,rhoVals)
+            for i = 2:1:obj.numOfQuadrotors
+                obj.quadrotors(i).loadPassivityIndices(nuVals(i-1),rhoVals(i-1));
+            end
+        end        
+
+
+
+        %% Draw the initial formations
+        function outputArg = drawFormation(obj, figNum)
             figure(figNum); hold on; 
 
             % Draw quadrotors
@@ -53,11 +134,12 @@ classdef Formation < handle
             end
             
             % use the obj.function() to add the topology (Because this is the layer that we can get access to the quadrotor class)
-            % obj.drawTopology(figNum) 
+            obj.drawTopology(figNum) 
         end
 
 
-        % Draw the topology for a fixed graph
+
+        %% Draw the topology for a fixed graph
         function outputArg = drawTopology(obj,figNum)
             figure(figNum); hold on;
 
@@ -65,45 +147,57 @@ classdef Formation < handle
                 delete(obj.graphics1);
                 delete(obj.graphics2);
             end
-
-            numOfLinks = length(obj.topology.startNodes);
+            
+            % Count the number of edges by counting the size of the start nodes' set
+            numOfLinks = length(obj.topology.startNodes);  
             for i = 1:1:numOfLinks
                 % Draw a link
-                startVehicleIndex = obj.topology.startNodes(i);
-                endVehicleIndex = obj.topology.endNodes(i);
+                startQuadrotorIndex = obj.topology.startNodes(i);
+                endQuadrotorIndex = obj.topology.endNodes(i);
 
-                startPos = obj.vehicles(startVehicleIndex).states(1) - obj.vehicles(startVehicleIndex).vehicleParameters(2)/2;
-                endPos = obj.vehicles(endVehicleIndex).states(1) - obj.vehicles(endVehicleIndex).vehicleParameters(2)/2;
+                startPos = obj.quadrotors(startQuadrotorIndex).states(1:3); 
+                endPos = obj.quadrotors(endQuadrotorIndex).states(1:3);
                 midPos = (startPos + endPos)/2;
-                midPointHeight = -3*sign(startPos-endPos)+0.05*abs(startPos-endPos)+1.5*(startPos<endPos); % 4
 
-                startPosY = obj.vehicles(startVehicleIndex).vehicleParameters(2)*3/8;
-                endPosY = obj.vehicles(endVehicleIndex).vehicleParameters(2)*3/8;
-                %obj.graphics(i) = plot([startPos,midPos,endPos],[startPosY,midPointHeight,endPosY],'-b');
+                midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); % +1*(startPos(1)-endPos(1))
+                midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate
+                midPos = [midPos(1:2); midPointZ];
+                
+                % Plotting the 3D Spline to represent the links
+                linkPoints = [startPos, midPos, endPos];
+                h = fnplt(cscvn(linkPoints));
+                obj.graphics1(i) = plot3(h(1,:),h(2,:),h(3,:),'-b');
 
-                % Plotting the Spline
-                x = [startPos,midPos,endPos];
-                y = [startPosY,midPointHeight,endPosY];
-                stepSize = (endPos-startPos)/20; 
-                xx = startPos:stepSize:endPos;
-                yy = spline(x,y,xx);
-                obj.graphics1(i) = plot(xx,yy,'-b');
-            
-                % Plotting the arrowHead (polyshape)
-                polyPosX = midPos;
-                polyPosY = midPointHeight;
-                polySize = 0.3;
-                polyVertX = [-0.5,1,-0.5];
-                polyVertY = [0.5,0,-0.5];
-                if polyPosY < 0
-                    polyVertX = -polyVertX;
-                end
-                arrowHead = polyshape(polyPosX+polySize*polyVertX,polyPosY+polySize*polyVertY);
-                obj.graphics2(i) = plot(arrowHead,'EdgeColor','k','FaceColor','b');
+                % Plotting the arrowHead (we draw the arrowhead based on spatial geometry)
+                % The plane is constructed by P1: startPos, P2: endPos, P3: midPos.
+                P1_P3 = midPos - startPos;  % Vector 1 in the (P1,P2,P3) plane
+                P1_P2 = endPos - startPos;  % Vector 2 in the (P1,P2,P3) plane
+                P1_P2_normalized = P1_P2/norm(P1_P2);
+                n1 = (hatmap(P1_P3)*P1_P2)/norm(hatmap(P1_P3)*P1_P2);   % The normal direction of the (P1,P2,P3) plane.
+                n2 = null([n1'; P1_P2']);   % The normal direction of the P1_P2 in the (P1,P2,P3) plane.
+                n2 = n2/norm(n2);   % We normalize this vector.
+
+                % Now, we construct the main axis of the arrowhead
+                polySize = 0.3;    % This is the parameter to change the size of the arrowhead.
+                arrowhead_P1 = midPos+polySize*P1_P2_normalized;   % Compute the coordinate of the 1st point of the arrowhead.
+
+                % Then, we construct the normal axis of the main axis of the arrowhead
+                P4 = midPos-0.5*polySize*P1_P2_normalized;
+                arrowhead_P2 = P4+0.5*polySize*n2;    % Compute the coordinate of the 2nd point of the arrowhead.
+                arrowhead_P3 = P4-0.5*polySize*n2;    % Compute the coordinate of the 3rd point of the arrowhead.
+
+                polyVert = [arrowhead_P1'; 
+                            arrowhead_P2';
+                            arrowhead_P3'];
+                polyFace = [1, 2, 3];
+                obj.graphics2(i) = patch('Faces',polyFace,'Vertices',polyVert,'FaceColor','blue','FaceAlpha',0.5);
             end            
+
         end
 
 
+
+        %% Redraw the formations (when quadrotors move)
         function outputArg = redrawFormation(obj,figNum)
             figure(figNum); hold on; 
                         
@@ -112,67 +206,417 @@ classdef Formation < handle
                 obj.quadrotors(i).redrawQuadrotor(figNum);
             end
             
-            % Redraw the topology by calling redrawTopology method, based on the newly updated states of the vehicles
-            % obj.redrawTopology(figNum) 
+            % Redraw the topology by calling redrawTopology method, based on the newly updated states of the quadrotors
+            obj.redrawTopology(figNum) 
         end
 
 
-        % Redraw the topology for a fixed graph
+
+        %% Redraw the topology for a fixed graph (when quadrotors move)
         function outputArg = redrawTopology(obj,figNum)
             figure(figNum); hold on;
-                 
-            numOfLinks = length(obj.topology.startNodes);
             
+            if ~isempty(obj.graphics2)
+                delete(obj.graphics1);
+                delete(obj.graphics2);
+            end
+
+            % Count the number of edges by counting the size of the start nodes' set
+            numOfLinks = length(obj.topology.startNodes);  
+
             for i = 1:1:numOfLinks
-                if ~isempty(obj.graphics1(i))
-                    delete(obj.graphics1(i));
-                    delete(obj.graphics2(i));
-
-                    % Redraw a link
-                    startVehicleIndex = obj.topology.startNodes(i);
-                    endVehicleIndex = obj.topology.endNodes(i);
-                    
-                    startPos = obj.vehicles(startVehicleIndex).states(1) - obj.vehicles(startVehicleIndex).vehicleParameters(2)/2;
-                    endPos = obj.vehicles(endVehicleIndex).states(1) - obj.vehicles(endVehicleIndex).vehicleParameters(2)/2;
-                    midPos = (startPos + endPos)/2;
-                    midPointHeight = -3*sign(startPos-endPos)+0.05*abs(startPos-endPos)+1.5*(startPos<endPos); % 4
-                    
-                    startPosY = obj.vehicles(startVehicleIndex).vehicleParameters(2)*3/8;
-                    endPosY = obj.vehicles(endVehicleIndex).vehicleParameters(2)*3/8;
-                    
-
-                    % Plotting the Spline
-                    x = [startPos,midPos,endPos];
-                    y = [startPosY,midPointHeight,endPosY];
-                    stepSize = (endPos-startPos)/20; 
-                    xx = startPos:stepSize:endPos;
-                    yy = spline(x,y,xx);
-                    obj.graphics1(i) = plot(xx,yy,'-b');
+                % if ~isempty(obj.graphics1(i))
+                %     delete(obj.graphics1(i));
+                %     delete(obj.graphics2(i));
                 
-                    % Plotting the arrowHead (polyshape)
-                    polyPosX = midPos;
-                    polyPosY = midPointHeight;
+                    % Redraw a link
+                    startQuadrotorIndex = obj.topology.startNodes(i);
+                    endQuadrotorIndex = obj.topology.endNodes(i);
+                    
+                    startPos = obj.quadrotors(startQuadrotorIndex).states(1:3); 
+                    endPos = obj.quadrotors(endQuadrotorIndex).states(1:3);
+                    midPos = (startPos + endPos)/2;
+                    
+                    midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); % +1*(startPos(1)-endPos(1))
+                    midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate
+                    midPos = [midPos(1:2); midPointZ];
+                    
+                    % Plotting the 3D Spline to represent the links
+                    linkPoints = [startPos, midPos, endPos];
+                    h = fnplt(cscvn(linkPoints));
+                    obj.graphics1(i) = plot3(h(1,:),h(2,:),h(3,:),'-b');
+
+                    % Plotting the arrowHead (we draw the arrowhead based on spatial geometry)
+                    % The plane is constructed by P1: startPos, P2: endPos, P3: midPos.
+                    P1_P3 = midPos - startPos;  % Vector 1 in the (P1,P2,P3) plane
+                    P1_P2 = endPos - startPos;  % Vector 2 in the (P1,P2,P3) plane
+                    P1_P2_normalized = P1_P2/norm(P1_P2);
+                    n1 = (hatmap(P1_P3)*P1_P2)/norm(hatmap(P1_P3)*P1_P2);   % The normal direction of the (P1,P2,P3) plane.
+                    n2 = null([n1'; P1_P2']);   % The normal direction of the P1_P2 in the (P1,P2,P3) plane.
+                    n2 = n2/norm(n2);   % We normalize this vector.
+
+                    % Now, we construct the main axis of the arrowhead
                     polySize = 0.3;
-                    polyVertX = [-0.5,1,-0.5];
-                    polyVertY = [0.5,0,-0.5];
-                    if polyPosY < 0
-                        polyVertX = -polyVertX;
-                    end
-                    arrowHead = polyshape(polyPosX+polySize*polyVertX,polyPosY+polySize*polyVertY);
-                    obj.graphics2(i) = plot(arrowHead,'EdgeColor','k','FaceColor','b');
+                    arrowhead_P1 = midPos+polySize*P1_P2_normalized;   % Compute the coordinate of the 1st point of the arrowhead.
+
+                    % Then, we construct the normal axis of the main axis of the arrowhead
+                    P4 = midPos-0.5*polySize*P1_P2_normalized;
+                    arrowhead_P2 = P4+0.5*polySize*n2;    % Compute the coordinate of the 2nd point of the arrowhead.
+                    arrowhead_P3 = P4-0.5*polySize*n2;    % Compute the coordinate of the 3rd point of the arrowhead.
+
+                    polyVert = [arrowhead_P1'; 
+                                arrowhead_P2';
+                                arrowhead_P3'];
+                    polyFace = [1, 2, 3];
+                    obj.graphics2(i) = patch('Faces',polyFace,'Vertices',polyVert,'FaceColor','blue','FaceAlpha',0.5);
                 end
             end            
         end
 
 
+
+        %% Generate noise
         function outputArg = generateNoises(obj)
             for i = 1:1:obj.numOfQuadrotors
                 obj.quadrotors(i).generateNoise();
             end
         end
+        
 
+
+        %% Compute the tracking errors from the bottom Quadrotor layer to this Formation layer (quadrotor network paper)
+        function outputArg = computeFormationErrors2Part1(obj, t, tMax)
+            leaderStates = obj.quadrotors(1).states;  % x_d, v_d (6 dimensions)
+            for i = 2:1:obj.numOfQuadrotors
+                obj.quadrotors(i).computeQuadrotorErrors2Part1(leaderStates, t, tMax);
+            end
+        end        
+
+
+
+        function outputArg = computeFormationErrors2Part2(obj, dt, t)
+            leaderStates = obj.quadrotors(1).states;  % x_d, v_d (6 dimensions)
+            for i = 2:1:obj.numOfQuadrotors
+                obj.quadrotors(i).computeQuadrotorErrors2Part2(leaderStates, dt, t);
+            end
+        end     
+
+
+
+        %% Compute the control input from the bottom Quadrotor layer to this Formation layer (quadrotor network paper)
+        function outputArg = computeControlInputs2Part1(obj, t)
+   
+            % O = zeros(3,1);
+            for i = 1:1:obj.numOfQuadrotors
+                neighborInformation = [];
+                for jInd = 1:1:length(obj.quadrotors(i).inNeighbors)
+                    j = obj.quadrotors(i).inNeighbors(jInd);
+                    % neighborInformation{j} = [obj.quadrotors(j).errors_bar(1:6); O; O];
+                            % We just ask for the collection of e_xi and x_vi from the neighboring quadrotors, 
+                            % since to compute the thrust force, there is no need for e_ROmegai_Bar.
+                    neighborInformation{j} = obj.quadrotors(j).errors_bar;
+                end 
+                obj.quadrotors(i).computeControlInputs2Part1(t, neighborInformation);
+            end
+        end    
+
+
+
+        function outputArg = computeControlInputs2Part2(obj)
+
+            % O = zeros(3,1);
+            for i = 1:1:obj.numOfQuadrotors
+            %     neighborInformation = [];
+            %     for jInd = 1:1:length(obj.quadrotors(i).inNeighbors)
+            %         j = obj.quadrotors(i).inNeighbors(jInd);
+            %         neighborInformation{j} = [O; O; obj.quadrotors(j).errors_bar(7:12)];
+            %                 % We just ask for the collection of \bar{e}_{Ri} and \bar{e}_{\Omegai} from the neighboring quadrotors, 
+            %                 % since to compute the torque, there is no need for e_xvi_Bar.
+            %     end
+            %     obj.quadrotors(i).computeControlInputs2Part2(neighborInformation);
+                  obj.quadrotors(i).computeControlInputs2Part2();
+            end
+        end    
+
+
+
+        %% Update the quadrotor dynamics and 
+        function totalError = update(obj, t, dt, tMax)
+            totalError = zeros(12,1);
+            for i = 1:1:obj.numOfQuadrotors
+                quadrotorError = obj.quadrotors(i).dynamicsUpdate(t, dt, tMax);
+                totalError = totalError + quadrotorError;
+            end
+        end
+
+
+
+        %% Robust Controller Synthesis Using Error Dynamics Formulation II With sMS Constraints
+        % Decentralized Robust Controller Synthesis With sMS Constraints (Error Dynamics Formulation II)
+        function status = decentralizedRobustControllerSynthesissMS2(obj, pVals)
+            displayMasseges = 1;
+            N = length(obj.quadrotors)-1;
+            indexing = 1:1:N; % Lets use the default indexin scheme
+            isSoft = 1;
+            
+            gammaSqVal = 0;
+            for i = 1:1:length(indexing)
+                iInd = indexing(i);
+                previousSubsystems = indexing(1:i-1);      
+                [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL,LVal] = obj.quadrotors(iInd+1).robustControllerSynthesissMS2(previousSubsystems, obj.quadrotors, pVals(iInd), displayMasseges, isSoft);
+                
+                % Collect the K_{ii} value into the K matrix
+                K{iInd,iInd} = K_ii;
+
+                % Collect the K_{ij} and K_{ji} values into the K matrix
+                for j = 1:1:length(previousSubsystems)
+                    jInd = previousSubsystems(j);
+                    K{iInd,jInd} = K_ijVals{jInd};
+                    K{jInd,iInd} = K_jiVals{jInd};
+
+                    %% We need to update K_{jj} values here!!! K_{j0} = k_{j0} + k_{ji}
+                    disp([' Local controller updated at j = ',num2str(j)])
+                    % obj.quadrotors(jInd+1).localControllerGains2 = obj.quadrotors(jInd+1).localControllerGains2 + [K{jInd,iInd}(4:6,:);K{jInd,iInd}(10:12,:)];   
+                    obj.quadrotors(jInd+1).localControllerGains2 = obj.quadrotors(jInd+1).localControllerGains2 + K{jInd,iInd}(4:6,:);
+                end
+                obj.KSequence{iInd} = K;
+                disp(['Current K at i = ',num2str(iInd)])
+                disp(cell2mat(K))
+                
+                % Update the gammaSq value
+                if gammaSq_iVal > gammaSqVal
+                    gammaSqVal = gammaSq_iVal;
+                end
+        
+                if ~isRobustStabilizable
+                    break
+                end
+
+            end
+            
+            if isRobustStabilizable
+                disp(['Global Synthesis Success with gammaSq=',num2str(value(gammaSqVal))])
+                status = 1;
+
+                maxNorm = 0;
+                for i = 1:1:N
+                    for j = 1:1:N
+                        normVal = max(max(abs(K{i,j})));
+                        if normVal>maxNorm 
+                            maxNorm = normVal;
+                        end
+                    end
+                end
+                
+                % filtering out extremely small interconnections
+                for i=1:1:N
+                    for j=1:1:N
+                        if i~=j
+                            if isSoft
+                                K{i,j}(abs(K{i,j})<0.0001*maxNorm) = 0;                       
+                            else
+                                if A(j+1,i+1)==0
+                                    % K{i,j} = zeros(12);
+                                    K{i,j} = zeros(6);
+                                end
+                            end
+                        end
+                        K_ijMax = max(abs(K{i,j}(:)));
+                        K{i,j}(abs(K{i,j})<0.01*K_ijMax) = 0;
+                    end
+                end
+
+                % Loading topology based on K
+                obj.loadTopologyFromK2(K); 
+                obj.loadControllerGains2(K);
+            else
+                disp(['Global Synthesis Failed'])
+                status = 0;
+            end
+
+        end
+
+
+
+        %% Co-design functions (to be used for pVal optimization later on)
+        function gammaSqVal = decentralizedRobustControllerSynthesissMS2Codesign(obj,pVals)
+            displayMasseges = 0;
+            N = length(obj.quadrotors)-1;
+            indexing = 1:1:N; % Lets use the default indexin scheme
+            isSoft = 1;
+
+            gammaSqVal = 0;
+            for i = 1:1:length(indexing)
+                iInd = indexing(i);
+                previousSubsystems = indexing(1:i-1);                
+                [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL_i,L_iVal] = ...
+                    obj.quadrotors(iInd+1).robustControllerSynthesissMS2(previousSubsystems, obj.quadrotors, pVals(iInd), displayMasseges, isSoft);
+                
+                if ~isRobustStabilizable
+                    break
+                end
+
+                if gammaSq_iVal > gammaSqVal
+                    gammaSqVal = gammaSq_iVal;
+                end                
+            end
+
+            if isRobustStabilizable
+                disp(['Global Synthesis Success with gammaSq=',num2str(value(gammaSqVal))])
+            else
+                gammaSqVal = 1000000-i*(10000);
+                disp(['Global Synthesis Failed'])
+            end
+
+        end 
 
         
+
+        function [C,Ceq] = decentralizedRobustControllerSynthesissMS2CodesignFeasibility(obj,pVals)
+            displayMasseges = 0;
+            N = length(obj.quadrotors)-1;
+            indexing = 1:1:N; % Lets use the default indexing scheme
+            isSoft = 1;
+
+            statusLVals = zeros(N,1);
+            LVals = zeros(3*N,6);
+            for i = 1:1:length(indexing)
+                iInd = indexing(i);
+                previousSubsystems = indexing(1:i-1);                
+                [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL_i,L_iVal] = ...
+                    obj.quadrotors(iInd+1).robustControllerSynthesissMS2(previousSubsystems, obj.quadrotors, pVals(iInd), displayMasseges, isSoft);
+                
+                if ~isRobustStabilizable
+                    break
+                else
+                    statusLVals(i) = statusL_i;
+                    LVals(1+3*(i-1):3*i,:) = L_iVal;
+                end
+            end
+
+            statusG = isRobustStabilizable;
+            statusK = norm(LVals) <= 10000*sqrt(N);
+            C = [statusLVals-ones(N,1); statusG-1; statusK-1];
+            Ceq = [];
+
+        end
+
+
+
+        %% Functions for Loading Controller Gains and Topology under Different Error Dynamics Formulations
+        % Loading Controller Gains (Error Dynamics Formulation II With sMS Constraints)
+        function outputArg = loadControllerGains2(obj, K)
+
+            N = obj.numOfQuadrotors-1;
+            
+            % Loading L_ij values from K
+            for i = 1:1:N
+                % sumK_ij = zeros(12,12);
+                sumK_ij = zeros(6,6);
+                for j = 1:1:N
+                    if j~=i
+                        sumK_ij = sumK_ij + K{i,j};
+                        % L{i,j} = -[K{i,j}(4:6,:); K{i,j}(10:12,:)];   % [0,0,0,0;l_ij^11,l_ij^12,l_ij^13,l_ij^14;0,0,0,0;l_ij^21,l_ij^22,l_ij^23,l_ij^24]
+                        L{i,j} = -K{i,j}(4:6,:);
+                    end
+                end                
+                K_i0 = K{i,i} + sumK_ij;
+                % L{i,i} = [K_i0(4:6,:); K_i0(10:12,:)];      % [0,0,0,0;l_ii^11,l_ii^12,l_ii^13,l_ii^14;0,0,0,0;l_ii^21,l_ii^22,l_ii^23,l_ii^24]
+                L{i,i} = K_i0(4:6,:);
+            end
+            
+            % Loading controller gains from L_ij values
+            for i = 1:1:N
+                obj.quadrotors(i+1).controllerGains2 = [];
+                obj.quadrotors(i+1).controllerGains2{i+1} = L{i,i};
+                for j = 1:1:N
+                    if j~=i && norm(L{i,j})> 0
+                        obj.quadrotors(i+1).controllerGains2{j+1} = L{i,j};
+                    end
+                end
+            end
+
+        end
+
+
+
+        % Loading Controller Gains (Error Dynamics Formulation II With/Without sMS Constraints)
+        function outputArg = loadTopologyFromK2(obj, K)
+
+            NBar = obj.numOfQuadrotors;
+
+            startNodes = [];
+            endNodes = [];
+            for i = 1:1:NBar
+                nodeNames{i} = num2str(i-1);
+                for j = 1:1:NBar
+                    if j ~= 1 && j~=i 
+                        if i == 1
+                            startNodes = [startNodes,i];
+                            endNodes = [endNodes,j];
+                        elseif norm(K{i-1,j-1})> 0
+                            startNodes = [startNodes,j];
+                            endNodes = [endNodes,i];
+                        end
+                    end
+                end
+
+            end
+
+            obj.topology = Topology(NBar,startNodes,endNodes,nodeNames);
+            obj.updateNeighbors();
+
+        end
+        
+
+ 
+        %% Codesign
+        function pVals = optimizeCodesignParameters(obj,isCentralized,issMS)
+            
+            N = obj.numOfQuadrotors-1;
+
+            % pARAMETERS
+            options = optimoptions('fmincon');
+ 
+            % Set OptimalityTolerance to 1e-3
+            options = optimoptions(options, 'OptimalityTolerance', 1e-3); 
+     
+            % Set the Display option to 'iter' and StepTolerance to 1e-4
+            options.Display = 'iter';
+            options.StepTolerance = 1e-4;
+
+            A = [];
+            b = [];
+            Aeq = [];
+            beq = [];
+            lb = zeros(N,1);
+            ub = inf*ones(N,1);
+            
+            % p0 = (1/N)*ones(N,1); % initial condition
+            p0 = 0.15*ones(N,1); % initial condition
+            if isCentralized && ~issMS
+                % f: Function of p_i parameters (each p_i used for local controller design), which will determine the resulting gamma value from the global design
+                % f is what we need to optimize with respect to the used p_i parameters
+                f = @(P)obj.centralizedRobustControllerSynthesis2Codesign(P);
+                nonlcon = @(P)obj.centralizedRobustControllerSynthesis2CodesignFeasibility(P);
+                % [pVals,fval] = fmincon(f,p0,A,b,Aeq,beq,lb,ub)
+                [pVals,fval] = fmincon(f,p0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+            elseif ~isCentralized && ~issMS
+                f = @(P)obj.decentralizedRobustControllerSynthesis2Codesign(P);
+                nonlcon = @(P)obj.decentralizedRobustControllerSynthesis2CodesignFeasibility(P);
+%                 [pVals,fval] = fmincon(f,p0,A,b,Aeq,beq,lb,ub)
+                [pVals,fval] = fmincon(f,p0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+            elseif ~isCentralized && issMS
+                f = @(P)obj.decentralizedRobustControllerSynthesissMS2Codesign(P);
+                nonlcon = @(P)obj.decentralizedRobustControllerSynthesissMS2CodesignFeasibility(P);
+%                 [pVals,fval] = fmincon(f,p0,A,b,Aeq,beq,lb,ub)
+                [pVals,fval] = fmincon(f,p0,A,b,Aeq,beq,lb,ub,nonlcon,options)
+            end           
+            pVals = pVals';
+        end
+        
+
+
     end
 end
 
