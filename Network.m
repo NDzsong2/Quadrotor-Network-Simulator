@@ -6,6 +6,7 @@ classdef Network < handle
         networkIndex
         numOfFormations % N
         numOfQuadrotors = [] % [n_1,n_2,...,n_N] 
+        numOfLines
 
         formations = [] % all the formations
 
@@ -21,11 +22,12 @@ classdef Network < handle
 
     methods
 
-        function obj = Network(indexVal,numOfFormations,numOfQuadrotors,parameters,states,desiredSeparation,noiseMean,noiseStd)
+        function obj = Network(indexVal,numOfFormations,numOfQuadrotors,numOfLines,parameters,states,desiredSeparation,noiseMean,noiseStd)
 
             obj.networkIndex = indexVal;
             obj.numOfFormations = numOfFormations;
             obj.numOfQuadrotors = numOfQuadrotors;
+            obj.numOfLines = numOfLines;
 
             % Create formations
             formations = [];
@@ -63,8 +65,8 @@ classdef Network < handle
             
             % Coordinate of the boundary of the bounding box
             lastFormation = obj.formations(obj.numOfFormations);
-            posX1 = lastFormation.quadrotors(lastFormation.numOfQuadrotors).states(1) - 2;
-            posX2 = obj.formations(1).quadrotors(1).states(1) + 2;
+            posX1 = lastFormation.quadrotors(lastFormation.numOfQuadrotors).states(1)-2;
+            posX2 = obj.formations(1).quadrotors(1).states(1)+1;
 
             posY1 = -5; % No lateral changes in Y direction for quadrotor formations
             posY2 = 5;
@@ -88,12 +90,20 @@ classdef Network < handle
             xlim([posX1 posX2]);
             ylim([posY1 posY2]);
             zlim([posZ1 posZ2]);
-
+            % if mod(obj.numOfLines,2) == 0
+            %     xlim([posX1-8 posX2+eps]);
+            %     ylim([posY1 posY2]);
+            %     zlim([posZ1 posZ2]);
+            % else
+            %     xlim([posX1-2 posX2+eps]);
+            %     ylim([posY1 posY2]);
+            %     zlim([posZ1 posZ2]);
+            % end
         end
 
 
         %% Errors & system statesx update
-        function outputArg = update(obj, t, dt, tMax)
+        function outputArg = update(obj, t, dt, tMax, isPlatoon)
             
             % Do the necessary computations/generations to generate the signals to initiate the program
             totalError = zeros(12,1);     
@@ -103,7 +113,7 @@ classdef Network < handle
                 % Error Dynamics Update: Computing Quadrotor Platooning
                 % Errors and Controls: 
                 % Part 1: position and velocity erros
-                obj.formations(k).computeFormationErrors2Part1(t, tMax);
+                obj.formations(k).computeFormationErrors2Part1(t, tMax, isPlatoon);
                 obj.formations(k).computeControlInputs2Part1(t);    % compute the obj.followerControlInput(1:3) for each quadrotor
                 
                 % Part 2: orientation and angular velocity errors.
@@ -182,14 +192,14 @@ classdef Network < handle
 
         
         %% Here, we basically have to derive each leader's trajectory
-        function outputArg = generateLeadersControlProfiles(obj, tVals, vxVals, vyVals)
+        function outputArg = generateLeadersControlProfiles(obj, tVals, vxVals, vyVals, ayVals)
             
             % vVals and aVals computation
             vVals = [];
             t_and_uVals = []; 
             for k = 1:1:length(tVals)
                 vVals = [vVals; [vxVals(k), vyVals(k), 0]];
-                t_and_uVals = [t_and_uVals; tVals(k)', [0 0 0]];  % The acceleration of the leader is [0 0 0]' in the last period of time.
+                t_and_uVals = [t_and_uVals; tVals(k)', [0, ayVals(k), 0]];  % The acceleration of the leader is [0 0 0]' in the last period of time.
             end 
 
             % Setting initial velocities
@@ -242,7 +252,8 @@ classdef Network < handle
                         end
                     elseif ~isCentralized == 1 && issMS     % Decentralized & DSS
                                                             % Robust
-                            status = obj.formations(k).decentralizedRobustControllerSynthesissMS2(pVals(k,:));   % This is the method we are working on.                         
+                            % status = obj.formations(k).decentralizedRobustControllerSynthesissMS2(pVals(k,:));   % This is the method we are working on.  
+                            status = obj.formations(k).decentralizedRobustControllerSynthesissMS2();   % This is the method we are working on without manual selection of p_i values.
                     end
                 end
                 

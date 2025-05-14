@@ -34,6 +34,7 @@ classdef Quadrotor < handle
         noise                 % disturbances (dx, dv, dR, dOmega)
         desiredSeparation     % From the leader
         desiredSeparations    % From all others
+        ds
         % desiredAcceleration   % Leader's acceleration
         Omegad                % Desired angular velocity
         Rd
@@ -132,6 +133,8 @@ classdef Quadrotor < handle
                 delete(obj.graphics);
             end
             
+            i = obj.quadrotorIndex;
+            
             % Collect all parameters for quadrotor drawing
             armlength = obj.quadrotorParameters(2);
             
@@ -199,7 +202,7 @@ classdef Quadrotor < handle
             pos = obj.states(1:3) + [0; 0; -1];
             
             % Quadrotor number
-            obj.graphics(4) = text(pos(1),pos(2),pos(3),[num2str(obj.quadrotorIndex - 1)],'FontSize',12);
+            obj.graphics(4) = text(pos(1),pos(2),pos(3),[num2str(obj.quadrotorIndex-1)],'FontSize',12);
     
         end
         
@@ -221,33 +224,67 @@ classdef Quadrotor < handle
 
 
         %% Compute the quadrotor's errors
-        function outputArg = computeQuadrotorErrors2Part1(obj, leaderStates, t, tMax)
+        function outputArg = computeQuadrotorErrors2Part1(obj, leaderStates, t, tMax, isPlatoon)
             separationFromLeader = obj.desiredSeparation; 
             
-            if t == 0
-                newPositionErrors = obj.states(1:3) - leaderStates(1:3) + [separationFromLeader;0;0];  % position tracking errors update                                   
-                newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
+            if isPlatoon == 1
+                % For quadrotor platoons
+                if t == 0
+                    newPositionErrors = obj.states(1:3) - leaderStates(1:3) + [separationFromLeader;0;0];  % position tracking errors update                                   
+                    newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
                 
-                obj.errors(1:3) = newPositionErrors; 
-                obj.errors(4:6) = newTransVelocityErrors;
-                obj.errors_bar = obj.errors(1:6);
-
-            elseif (t > 0) && (t < 0.5*tMax)
-                newPositionErrors = obj.states(1:3) - leaderStates(1:3) + [separationFromLeader;0;0];    % position tracking errors update
-                newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
+                    obj.errors(1:3) = newPositionErrors; 
+                    obj.errors(4:6) = newTransVelocityErrors;
+                    obj.errors_bar = obj.errors(1:6);
+ 
+                elseif (t > 0) && (t < 0.5*tMax)
+                    newPositionErrors = obj.states(1:3) - leaderStates(1:3) + [separationFromLeader;0;0];    % position tracking errors update
+                    newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
                 
-                obj.errors(1:3) = newPositionErrors; 
-                obj.errors(4:6) = newTransVelocityErrors;
-                obj.errors_bar = obj.errors(1:6);
+                    obj.errors(1:3) = newPositionErrors; 
+                    obj.errors(4:6) = newTransVelocityErrors;
+                    obj.errors_bar = obj.errors(1:6);
             
-            elseif t >= 0.5*tMax
-                newPositionErrors = obj.states(1:3) - leaderStates(1:3) + [separationFromLeader;0;0]; % [0;separationFromLeader;0];   % position tracking errors update                
+                elseif t >= 0.5*tMax
+                    newPositionErrors = obj.states(1:3) - leaderStates(1:3) + [separationFromLeader;0;0]; % [0;separationFromLeader;0];   % position tracking errors update                
+                    newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
+                
+                    obj.errors(1:3) = newPositionErrors; 
+                    obj.errors(4:6) = newTransVelocityErrors;
+                    obj.errors_bar = obj.errors(1:6);
+                end
+            else
+                % For quadrotor formations
+                newPositionErrors = obj.states(1:3) - (leaderStates(1:3) + separationFromLeader);  % position tracking errors update                                   
                 newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
                 
                 obj.errors(1:3) = newPositionErrors; 
                 obj.errors(4:6) = newTransVelocityErrors;
                 obj.errors_bar = obj.errors(1:6);
-
+                % if t == 0
+                %     newPositionErrors = obj.states(1:3) - (leaderStates(1:3) - separationFromLeader);  % position tracking errors update                                   
+                %     newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
+                % 
+                %     obj.errors(1:3) = newPositionErrors; 
+                %     obj.errors(4:6) = newTransVelocityErrors;
+                %     obj.errors_bar = obj.errors(1:6);
+                % 
+                % elseif (t > 0) && (t < 0.5*tMax)
+                %     newPositionErrors = obj.states(1:3) - (leaderStates(1:3) - separationFromLeader);    % position tracking errors update
+                %     newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
+                % 
+                %     obj.errors(1:3) = newPositionErrors; 
+                %     obj.errors(4:6) = newTransVelocityErrors;
+                %     obj.errors_bar = obj.errors(1:6);
+                % 
+                % elseif t >= 0.5*tMax
+                %     newPositionErrors = obj.states(1:3) - (leaderStates(1:3) - separationFromLeader); % [0;separationFromLeader;0];   % position tracking errors update                
+                %     newTransVelocityErrors = obj.states(4:6) - leaderStates(4:6);   % (body) velocity tracking errors update
+                % 
+                %     obj.errors(1:3) = newPositionErrors; 
+                %     obj.errors(4:6) = newTransVelocityErrors;
+                %     obj.errors_bar = obj.errors(1:6);
+                % end
             end
         end
 
@@ -257,7 +294,7 @@ classdef Quadrotor < handle
             I = eye(3);
             O = zeros(3);
             R = [obj.states(7:9) obj.states(10:12) obj.states(13:15)];
-            varepsilon = obj.quadrotorParameters(7);
+            
             e3 = [0 0 1]';
 
             if t == 0    
@@ -278,15 +315,8 @@ classdef Quadrotor < handle
                 obj.errors(7:9) = newAttitudeErrors; 
                 obj.errors(10:12) = newAngVelocityErrors;
 
-                % obj.C = 0.5*(trace(Re')*I-Re');
-                % obj.C_dot = 0.5*(trace(Re_dot')*I-Re_dot');
-                % T = [I  O  O  O;
-                %      O  I  O  O;
-                %      O  O  1/varepsilon*I O;
-                %      O  O  O  obj.C];        % transformation matrix T
-      
+                      
                 % Transformed errors
-                % obj.errors_bar = T*obj.errors;
                 obj.errorHistory = [obj.errorHistory; obj.errors'];
 
             else 
@@ -304,21 +334,13 @@ classdef Quadrotor < handle
                 newAttitudeErrors = 0.5*veemap(Re-Re');        % orientation tracking errors update   
 
                 obj.Omegad = 1/(2*dt)*veemap(Rd_Old'*obj.Rd-obj.Rd'*Rd_Old);
-                % Re_dot = (obj.Rd*hatmap(obj.Omegad))'*R+obj.Rd'*(R*hatmap(obj.states(16:18)));
-                
-                % obj.C = 0.5*(trace(Re')*I-Re');
-                % obj.C_dot = 0.5*(trace(Re_dot')*I-Re_dot');
-                % T = [I  O  O  O;
-                %      O  I  O  O;
-                %      O  O  1/varepsilon*I  O;
-                %      O  O  O  obj.C];        % transformation matrix T
+                                
 
                 newAngVelocityErrors = obj.states(16:18)-Re'*obj.Omegad;    % angular velocity tracking errors update
                 
                 % Transformed errors
                 obj.errors(7:9) = newAttitudeErrors; 
                 obj.errors(10:12) = newAngVelocityErrors;
-                % obj.errors_bar = T*obj.errors;
                 obj.errorHistory = [obj.errorHistory; obj.errors'];
 
             end
@@ -341,9 +363,8 @@ classdef Quadrotor < handle
             else                      % Followers control (based on errors) under Error-Dynamics - II
                 
                 i = obj.quadrotorIndex;
-                % O = zeros(3,1);
+                
                 L_ii = obj.controllerGains2{i} + obj.localControllerGains2;   % This parameter is \bar{L}_{ii}+L_{ii}\in\mathbb{R}^{3\times 6}
-                % e_xvi_bar = [obj.errors_bar(1:6); O; O];        % Note that e_{xi} = \bar{e}_xi, e_{vi}=\bar{e}_vi, and e_xvi_bar = [e_{xi};e_{vi};O;O]
                 e_i_bar = obj.errors_bar;
 
                 % obj.controlInput(1:3) = L_ii(1:3,:)*e_xvi_bar;
@@ -352,8 +373,6 @@ classdef Quadrotor < handle
                     j = obj.inNeighbors(jInd);
                     if j~=1
                         L_ij = obj.controllerGains2{j};         % L_ij
-                        % e_xvj_bar = neighborInformation{j};     % Use the shared neighboring information e_{xi} and e_{vi} (e_{xi} = \bar{e}_xi, e_{vi}=\bar{e}_vi)
-                        % obj.controlInput(1:3) = obj.controlInput(1:3) + L_ij(1:3,:)*(e_xvi_bar - e_xvj_bar);
                         e_j_bar = neighborInformation{j};
                         obj.controlInput(1:3) = obj.controlInput(1:3) + L_ij*(e_i_bar - e_j_bar);
                     end 
@@ -370,15 +389,14 @@ classdef Quadrotor < handle
         function outputArg = computeControlInputs2Part2(obj)
             
             i = obj.quadrotorIndex;
+            varepsilon = obj.quadrotorParameters(7);   % Singular perturbation parameter
 
             if i > 1 % Followers control (based on errors) under Error-Dynamics - II
 
-                % O = zeros(3,1);
                 I = eye(3);
-                % L_ii = obj.controllerGains2{i} + obj.localControllerGains2;   % \bar{L}_{ii}+L_{ii}
-                % e_ROmegai_bar = [O; O; obj.errors_bar(7:12)];   % Note that e_{Ri} = varepsilon*\bar{e}_{Ri}, e_{Omegai}=(Ci^{-1})*\bar{e}_{Omegai}, and e_ROmegai_bar = Ti*[O;O;e_{Ri};e_{Omegai}]
                 e_ROmegai = obj.errors(7:12);
-
+                
+                
                 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
                 % l11 = 20;
                 % l12 = 20;
@@ -386,8 +404,8 @@ classdef Quadrotor < handle
                 % l14 = 0;
                 % l21 = 0;
                 % l22 = 0;
-                l23 = 5/(0.1);
-                l24 = 5/0.1;   % We add some perturbation parameter here
+                l23 = 5/(varepsilon);
+                l24 = 5/varepsilon;   % We add some singular perturbation parameter here
 
                 LiiBar = -[ l23*I l24*I ];
 
@@ -424,13 +442,17 @@ classdef Quadrotor < handle
             if i == 1  % Leader's states update (by planned control)
                 
                 % Leader's states updates
-                if t < 0.5*tMax
-                    obj.states(4:6) = obj.plannedLeaderStates(1,:)';
-                elseif t < tMax
-                    obj.states(4:6) = obj.plannedLeaderStates(2,:)';
-                else
-                    obj.states(4:6) = obj.plannedLeaderStates(3,:)';
-                end
+                % if t < 0.5*tMax
+                %     obj.states(4:6) = obj.plannedLeaderStates(1,:)';
+                % elseif t < tMax
+                %     obj.states(4:6) = obj.plannedLeaderStates(2,:)';
+                % else
+                %     obj.states(4:6) = obj.plannedLeaderStates(3,:)';
+                % end
+                                
+                obj.states(4:6) = obj.plannedLeaderStates(1,:)';
+                obj.plannedLeaderStates = obj.plannedLeaderStates(2:end,:);
+
                 leaderPositionUpdate = obj.states(4:6); 
                 leaderTransVelocityUpdate = obj.leaderControlInput;
 
@@ -486,130 +508,217 @@ classdef Quadrotor < handle
             obj.rho = rho;
         end
 
-
-
-        
         
 
-        %% Parametrized Approach to Synthesize Local Controllers (while also assisting synthesis of global controllers)
-        function [status,PVal,KVal,LVal,nuVal,rhoVal,gammaSqVal] = synthesizeLocalControllersParameterized(obj,errorDynamicsType,pVal)
-            % Here we will synthesize the local controllers for local error
-            % dynamics to optimize the passivity properties
-            % This is the true local controller synthesis for a given p_i value
+        % %% Parametrized Approach to Synthesize Local Controllers (while also assisting synthesis of global controllers)
+        % function [status,PVal,KVal,LVal,nuVal,rhoVal,gammaSqVal] = synthesizeLocalControllersParameterized(obj,errorDynamicsType,pVal)
+        %     % Here we will synthesize the local controllers for local error
+        %     % dynamics to optimize the passivity properties
+        %     % This is the true local controller synthesis for a given p_i value
+        % 
+        %     I = eye(3);
+        %     O = zeros(3);
+        %     I_n = eye(6);
+        %     O_n = zeros(6);
+        %     % Ones = ones(3);
+        %     % I_n = eye(12);
+        %     % O_n = zeros(12);
+        %     % O_K = zeros(6,12);
+        %     % O_K = zeros(3,6);            
+        % 
+        %     % varepsilon = obj.quadrotorParameters(7);
+        % 
+        %     if errorDynamicsType == 1
+        %         A = [O, I, O, O;
+        %              O, O, O, O;
+        %              O, O, O, I;
+        %              O, O, O, O];    % For error dynamics type 1
+        %     else
+        %         % A = [O, I, O, O;
+        %         %      O, O, O, O;
+        %         %      O, O, O, 1/varepsilon*I;
+        %         %      O, O, O, O];    % For error dynamics type 2  
+        %         A = [O, I; 
+        %              O, O];    % For error dynamics type 2  
+        %     end
+        % 
+        %     % B = [O, O;
+        %     %      I, O;
+        %     %      O, O;
+        %     %      O, 1/varepsilon*I];
+        % 
+        %     B = [O; I];
+        % 
+        %     % Set up the LMI problem
+        %     solverOptions = sdpsettings('solver','mosek','verbose',0);            
+        %     % P = sdpvar(12,12,'symmetric'); 
+        %     % K = sdpvar(6,12,'full'); 
+        % 
+        %     P = sdpvar(6,6,'symmetric'); 
+        %     K = sdpvar(3,6,'full');
+        % 
+        %     nu = sdpvar(1,1,'full');
+        %     rhoTilde = sdpvar(1,1,'full'); % Representing: 1/rho
+        %     gammaSq = sdpvar(1,1,'full');
+        % 
+        %     % For: nuBar < nu < nuHat < 0
+        %     nuBar = -gammaSq/pVal;
+        % 
+        %     % For: 0 < rhoHat1,rhoHat2 < rho < rhoBar
+        %     % For: 0 < rhoTildeHat < rhoTilde < rhoTildeBar1,rhoTildeBar2
+        %     rhoTildeBar1 = 4*gammaSq/pVal;
+        %     rhoTildeBar2 = pVal;
+        % 
+        %     % Basic Constraints
+        %     con1 = P >= 0;
+        % 
+        %     % Approach 4 with rho = prespecified, nu < 0 and nu is free to maximize
+        %     DMat = [rhoTilde*I_n];
+        %     MMat = [P, O_n];
+        %     ThetaMat = [-A*P-P*A'-B*K-K'*B', -I_n+0.5*P; 
+        %                 -I_n+0.5*P, -nu*I_n];
+        %     W = [DMat, MMat; 
+        %          MMat', ThetaMat];
+        %     con2 = W >= 0;
+        % 
+        %     %%Constraints on resulting nu and rho from the local design 
+        %     % nuBar < nu < nuHat < 0 
+        %     con3 = nu >= nuBar;              % Helps global design
+        % 
+        %     % 0 < rhoTildeHat < rhoTilde < rhoTildeBar1,rhoTildeBar2  
+        %     con4 = rhoTilde <= rhoTildeBar1;    % Helps global design
+        %     con5 = rhoTilde <= rhoTildeBar2;    % Helps global design
+        % 
+        %     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %     % We constrain the format of the P, \bar{L}_{ii}, and \tilde{L}_{ii}
+        %     % nullMatxP = [ O    O   Ones Ones;
+        %     %               O    O   Ones Ones;
+        %     %              Ones Ones  O    O;
+        %     %              Ones Ones  O    O];
+        %     % nullMatxK = [ O    O   Ones Ones;
+        %     %              Ones Ones  O    O];
+        % 
+        %     % con6 = P.*(nullMatxP==1) == O_n;
+        %     % con7 = K.*(nullMatxK==1) == O_K;
+        %     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % 
+        %     % Total Cost and Constraints
+        %     cons = [con1,con2,con3,con4,con5];
+        %     % cons = [con1,con2,con3,con4,con5,con6,con7];
+        %     %costFun =  0*(-nu + rhoBar);           % For stabilizing, set coefficient to 0
+        %     %costFun = 0.0000001*(-nu + rhoBar);    % Otherwise set to 0.0000001.
+        %     costFun = 0*gammaSq;
+        % 
+        %     % Solution
+        %     sol = optimize(cons,costFun,solverOptions);
+        %     status = sol.problem == 0;   % sol.info;
+        % 
+        %     PVal = value(P);     % This is the P_i value obtained from solving the local control synthesis
+        %     KVal = value(K);     % This is \tilde{L}_{ii}
+        %     LVal = KVal/PVal;    % This LVal is the local controller gain \bar{L}_{ii}
+        % 
+        %     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %     % We need to involve the singular perturbation (varepsilon) here for local controller gain \bar{L}_{ii}!
+        %     % LVal(4:6,:) = 1/varepsilon*LVal(4:6,:);
+        %     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % 
+        %     RVal = inv(PVal);
+        %     obj.R_i = RVal;
+        % 
+        %     nuVal = value(nu);
+        %     rhoVal = 1/value(rhoTilde);
+        %     gammaSqVal = value(gammaSq);
+        % 
+        %     % Updating the information
+        %     obj.nu = nuVal;
+        %     obj.rho = rhoVal;
+        % 
+        %     obj.localControllerGains1 = LVal;     % Here we need \bar{k}_{i0}^{Local} = 1
+        %     obj.localControllerGains2 = LVal; 
+        % 
+        % end
+
+
+        %% Parametrized Approach to Synthesize Local Controllers (without manual selection of the parameter p_i's)
+        function [status,PVal,KVal,LVal,nuVal,rhoVal,gammaSqVal] = synthesizeLocalControllersParameterized(obj,errorDynamicsType)
+            % Here, we will synthesize the local controllers for local error dynamics to optimize the passivity properties.
+            % This is the true local controller synthesis without the need to select the p_i values
             
             I = eye(3);
             O = zeros(3);
             I_n = eye(6);
-            O_n = zeros(6);
-            % Ones = ones(3);
-            % I_n = eye(12);
-            % O_n = zeros(12);
-            % O_K = zeros(6,12);
-            % O_K = zeros(3,6);            
+            O_n = zeros(6);        
             
-            % varepsilon = obj.quadrotorParameters(7);
-
             if errorDynamicsType == 1
                 A = [O, I, O, O;
                      O, O, O, O;
                      O, O, O, I;
                      O, O, O, O];    % For error dynamics type 1
             else
-                % A = [O, I, O, O;
-                %      O, O, O, O;
-                %      O, O, O, 1/varepsilon*I;
-                %      O, O, O, O];    % For error dynamics type 2  
-                A = [O, I; O, O];    % For error dynamics type 2  
+                A = [O, I; 
+                     O, O];    % For error dynamics type 2  
             end
-            
-            % B = [O, O;
-            %      I, O;
-            %      O, O;
-            %      O, 1/varepsilon*I];
             
             B = [O; I];
             
             % Set up the LMI problem
             solverOptions = sdpsettings('solver','mosek','verbose',0);            
-            % P = sdpvar(12,12,'symmetric'); 
-            % K = sdpvar(6,12,'full'); 
-
-            P = sdpvar(6,6,'symmetric'); 
-            K = sdpvar(3,6,'full');
-        
-            nu = sdpvar(1,1,'full');
-            rhoTilde = sdpvar(1,1,'full'); % Representing: 1/rho
-            gammaSq = sdpvar(1,1,'full');
             
-            % For: nuBar < nu < nuHat < 0
-            nuBar = -gammaSq/pVal;
-        
-            % For: 0 < rhoHat1,rhoHat2 < rho < rhoBar
-            % For: 0 < rhoTildeHat < rhoTilde < rhoTildeBar1,rhoTildeBar2
-            rhoTildeBar1 = 4*gammaSq/pVal;
-            rhoTildeBar2 = pVal;
-        
+            % Define optimization variables
+            P_tilde = sdpvar(6,6,'symmetric'); 
+            K_tilde = sdpvar(3,6,'full');   % This is \tilde{L}_{ii}
+            nu_tilde = sdpvar(1,1,'full');
+            rho = sdpvar(1,1,'full'); 
+            gammaSq_tilde = sdpvar(1,1,'full');
+            p_tilde = sdpvar(1,1,'full');
+            
             % Basic Constraints
-            con1 = P >= 0;
+            con1 = P_tilde >= 0;
+            con2 = rho >= 1; % 7.5
+            con3 = nu_tilde <= 0;
             
-            % Approach 4 with rho = prespecified, nu < 0 and nu is free to maximize
-            DMat = [rhoTilde*I_n];
-            MMat = [P, O_n];
-            ThetaMat = [-A*P-P*A'-B*K-K'*B', -I_n+0.5*P; 
-                        -I_n+0.5*P, -nu*I_n];
+            % LMI constraint for dissipativity properties
+            DMat = [I_n];
+            MMat = [P_tilde, O_n];
+            ThetaMat = [-A*P_tilde-P_tilde*A'-B*K_tilde-K_tilde'*B', -rho*I_n+0.5*P_tilde; 
+                        -rho*I_n+0.5*P_tilde, -nu_tilde*I_n];
             W = [DMat, MMat; 
                  MMat', ThetaMat];
-            con2 = W >= 0;
-            
-            %%Constraints on resulting nu and rho from the local design 
-            % nuBar < nu < nuHat < 0 
-            con3 = nu >= nuBar;              % Helps global design
-            
-            % 0 < rhoTildeHat < rhoTilde < rhoTildeBar1,rhoTildeBar2  
-            con4 = rhoTilde <= rhoTildeBar1;    % Helps global design
-            con5 = rhoTilde <= rhoTildeBar2;    % Helps global design
+            con4 = W >= 0;
 
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % We constrain the format of the P, \bar{L}_{ii}, and \tilde{L}_{ii}
-            % nullMatxP = [ O    O   Ones Ones;
-            %               O    O   Ones Ones;
-            %              Ones Ones  O    O;
-            %              Ones Ones  O    O];
-            % nullMatxK = [ O    O   Ones Ones;
-            %              Ones Ones  O    O];
+            % LMI constraint for necessary conditions
+            con5 = [-nu_tilde, 0, 0, -nu_tilde;
+                     0, p_tilde, p_tilde, 0;
+                     0, p_tilde, 1, -0.5;
+                    -nu_tilde, 0, -0.5, gammaSq_tilde] >= 0;
 
-            % con6 = P.*(nullMatxP==1) == O_n;
-            % con7 = K.*(nullMatxK==1) == O_K;
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            
             % Total Cost and Constraints
             cons = [con1,con2,con3,con4,con5];
-            % cons = [con1,con2,con3,con4,con5,con6,con7];
-            %costFun =  0*(-nu + rhoBar);           % For stabilizing, set coefficient to 0
-            %costFun = 0.0000001*(-nu + rhoBar);    % Otherwise set to 0.0000001.
-            costFun = 0*gammaSq;
+            costFun = 0*gammaSq_tilde;
         
             % Solution
             sol = optimize(cons,costFun,solverOptions);
             status = sol.problem == 0;   % sol.info;
         
-            PVal = value(P);     % This is the P_i value obtained from solving the local control synthesis
-            KVal = value(K);     % This is \tilde{L}_{ii}
-            LVal = KVal/PVal;    % This LVal is the local controller gain \bar{L}_{ii}
-
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % We need to involve the singular perturbation (varepsilon) here for local controller gain \bar{L}_{ii}!
-            % LVal(4:6,:) = 1/varepsilon*LVal(4:6,:);
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            P_tildeVal = value(P_tilde);     % This is the \tilde{P}_i value obtained from solving the local control synthesis
+            K_tildeVal = value(K_tilde);     % \tilde{L}_{ii}
+            nu_tildeVal = value(nu_tilde);   % \tilde{nu}_i
+            rhoVal = value(rho);             % \rho_i
+            p_tildeVal = value(p_tilde);     % \tilde{p}_i
+            gammaSq_tildeVal = value(gammaSq_tilde);    % \tilde{\gamma}_i
             
+            % Extract out the values of all the variables of interest
+            nuVal = nu_tildeVal/rhoVal;      % \nu_i
+            pVal = 1/(rhoVal*p_tildeVal);    % p_i
+            gammaSqVal = gammaSq_tildeVal/(rhoVal^2*p_tildeVal)   % \gamma
+            PVal = P_tildeVal/rhoVal;
             RVal = inv(PVal);
-            obj.R_i = RVal;
+            KVal = K_tildeVal;   
+            LVal = KVal/P_tildeVal;    % This LVal is the local controller gain \bar{L}_{ii}
+            
 
-            nuVal = value(nu);
-            rhoVal = 1/value(rhoTilde);
-            gammaSqVal = value(gammaSq);
-        
             % Updating the information
+            obj.R_i = RVal;
             obj.nu = nuVal;
             obj.rho = rhoVal;
 
@@ -620,7 +729,8 @@ classdef Quadrotor < handle
 
 
         %% Decentralized Robust Controller Synthesis With sMS Constraints (Error Dynamics II)
-        function [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL,LVal] = robustControllerSynthesissMS2(obj, previousSubsystems, subsystems, pVal, displayMasseges, isSoft)
+        % function [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL,LVal] = robustControllerSynthesissMS2(obj, previousSubsystems, subsystems, pVal, displayMasseges, isSoft)
+        function [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL,LVal] = robustControllerSynthesissMS2(obj, previousSubsystems, subsystems, displayMasseges, isSoft)
 
             % i = length(previousSubsystems)+1;
             iInd = obj.quadrotorIndex-1;
@@ -628,10 +738,10 @@ classdef Quadrotor < handle
             costCoefficient1 = 1;
             costCoefficient2 = 1; 
             costCoefficient3 = 1; 
-            varepsilon = obj.quadrotorParameters(7);   % Singular perturbation parameter
-            
+                        
             % Add PVal and KVal in the original local controller synthesis function here to be used later
-            [statusL,PVal,KVal,LVal,nuVal,rhoVal,gammaSqLVal] = obj.synthesizeLocalControllersParameterized(2, pVal);
+            % [statusL,PVal,KVal,LVal,nuVal,rhoVal,gammaSqLVal] = obj.synthesizeLocalControllersParameterized(2, pVal);
+            [statusL,PVal,KVal,LVal,nuVal,rhoVal,gammaSqLVal] = obj.synthesizeLocalControllersParameterized(2);
             if displayMasseges
                 % disp(['Robust Stabilizing at: ',num2str(iInd),' after ',num2str(previousSubsystems),'.']);
                 if statusL == 1
@@ -652,8 +762,7 @@ classdef Quadrotor < handle
             % normType = 2;  % Type of the norm to be used in the LMI
             minCostVal = 0.01;
 
-            % I_n = eye(12);       
-            % O_n = zeros(12);
+
             I_n = eye(6);       
             O_n = zeros(6);
             Ones = ones(3);
@@ -819,15 +928,6 @@ classdef Quadrotor < handle
 
                     jInd = previousSubsystems(j);
 
-                    % null_ij{j} = [Ones Ones  Ones Ones;
-                    %                O    O    Ones Ones;
-                    %               Ones Ones  Ones Ones;
-                    %               Ones Ones   O    O];
-                    % null_ji{j} = [Ones Ones  Ones Ones;
-                    %                O    O    Ones Ones;
-                    %               Ones Ones  Ones Ones;
-                    %               Ones Ones   O    O];
-
                     null_ij{j} = [ Ones  Ones;
                                     O     O ];
                     null_ji{j} = [ Ones  Ones;
@@ -842,27 +942,11 @@ classdef Quadrotor < handle
                     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
                     if any(obj.inNeighbors==jInd) % iInd <----- jInd
-                        % adj_ij{j} = [O    O    O    O;
-                        %             Ones Ones  O    O;
-                        %              O    O    O    O;
-                        %              O    O   Ones Ones]; % is in-neighbors
-                        % cost_ij{j} = 1*[O    O    O    O;
-                        %                Ones Ones  O    O;
-                        %                 O    O    O    O;
-                        %                 O    O   Ones Ones];
                         adj_ij{j} = [ O    O;
                                      Ones Ones ]; % is in-neighbors
                         cost_ij{j} = 1*[ O    O;
                                         Ones Ones ];
                     else
-                        % adj_ij{j} = [O, O, O, O;
-                        %              O, O, O, O;
-                        %              O, O, O, O;
-                        %              O, O, O, O]; % not in-neighbors
-                        % cost_ij{j} = (20/N)*abs(iInd-jInd)*[O    O    O    O;
-                        %                                    Ones Ones  O    O;
-                        %                                     O    O    O    O;
-                        %                                     O    O   Ones Ones];
                         adj_ij{j} = [ O, O;
                                       O, O ]; % not in-neighbors
                         cost_ij{j} = (20/N)*abs(iInd-jInd)*[ O    O;
@@ -870,28 +954,12 @@ classdef Quadrotor < handle
                     end
 
                     if any(obj.outNeighbors==jInd) % iInd -----> jInd
-                        % adj_ji{j} = [O    O    O    O;
-                        %             Ones Ones  O    O;
-                        %              O    O    O    O;
-                        %              O    O   Ones Ones]; % is out-neighbors
-                        % cost_ji{j} = 1*[O    O    O    O;
-                        %                Ones Ones  O    O;
-                        %                 O    O    O    O;
-                        %                 O    O   Ones Ones];
                         adj_ji{j} = [ O     O;
                                      Ones  Ones ]; % is out-neighbors
                         cost_ji{j} = 1*[ O    O;
                                         Ones Ones ];
 
                     else
-                        % adj_ji{j} = [O, O, O, O;
-                        %              O, O, O, O;
-                        %              O, O, O, O;
-                        %              O, O, O, O];    % not out-neighbors
-                        % cost_ji{j} = (20/N)*abs(iInd-jInd)*[O    O    O    O;
-                        %                                    Ones Ones  O    O;
-                        %                                     O    O    O    O;
-                        %                                     O    O   Ones Ones];
                         adj_ji{j} = [ O, O;
                                       O, O ];    % not out-neighbors
                         cost_ji{j} = (20/N)*abs(iInd-jInd)*[ O    O;

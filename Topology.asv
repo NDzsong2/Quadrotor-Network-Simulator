@@ -87,37 +87,36 @@ classdef Topology < handle
             endNodes = [];
             for i = 1:1:NBar
                 nodeNames{i} = num2str(i-1);
-                % state_i = obj.formations.quadrotors(i).states(1:3);
+                state_i = obj.formations.quadrotors(i).states(1:3);
                 % From node i, there can be links going to all other NBar nodes 
                 for j = 1:1:NBar
                     % Add links from leader to followers
-                    if i == 1 && j~=i
-                        startNodes = [startNodes, i];
-                        endNodes = [endNodes, j];
-                    end
+                    % if i == 1 && j~=i
+                    %     startNodes = [startNodes, i];
+                    %     endNodes = [endNodes, j];
+                    % end
                     if j~=1 && j~=i 
-                        % state_j = obj.formations.quadrotors(j).states(1:3);
-                        % if norm(state_i-state_j) <= 3
-                        %     startNodes = [startNodes,i];
-                        %     endNodes = [endNodes,j];
-                        % end
+                        state_j = obj.formations.quadrotors(j).states(1:3);
+                        if norm(state_i-state_j) <= 3
+                            startNodes = [startNodes,i];
+                            endNodes = [endNodes,j];
+                        end
                         % if abs(i-j)==1 || abs(i-j)==3 % If i and j are adjacent, add a link from i to j
                         %     startNodes = [startNodes,i];
                         %     endNodes = [endNodes,j];
                         % elseif abs(i-j)>5 && abs(i-j)<=7
                         %     startNodes = [startNodes,i];
                         %     endNodes = [endNodes,j];
-                        % end
                         % elseif rand(1) <= 0.8*(1/abs(i-j))
                         %     startNodes = [startNodes,i];
                         %     endNodes = [endNodes,j];
-                        if abs(i-j) <= 3 % If i and j are adjacent, add a link from i to j
-                            startNodes = [startNodes,i];
-                            endNodes = [endNodes,j];
+                        % if abs(i-j) <= 3 % If i and j are adjacent, add a link from i to j
+                        %     startNodes = [startNodes,i];
+                        %     endNodes = [endNodes,j];
                         % elseif abs(i-j)>5 && abs(i-j)<=7
                         %     startNodes = [startNodes,i];
                         %     endNodes = [endNodes,j];
-                        end
+                        % end
                     end
                 end
 

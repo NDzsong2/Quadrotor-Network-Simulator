@@ -31,17 +31,15 @@ classdef Formation < handle
             
             % Create quadrotors in a formation
             quadrotors = [];
-            vareps = [];
             for i = 1:1:n_k 
                 % Create an object from the Quadrotor class
                 quadrotor = Quadrotor(k,i,parameters(:,i),states(:,i),desiredSeparation(:,i),noiseMean(:,i),noiseStd(:,i), n_k); % The last one is the total number of quadrotors.
-                vareps = [vareps, parameters(7,i)];
                 quadrotors = [quadrotors, quadrotor];
             end
             obj.quadrotors = quadrotors;
-            obj.varepsilon = vareps;     % A set of all varepsilon_i for all quadrotors
-
+            
             obj.topology = Topology(n_k);     % Generate the topology
+            % obj.topology.quadrotors = quadrotors;  % Pass this collected quadrotor objects to the Topology class
             obj.updateNeighbors();            % update the neighbor information of each quadrotor object inside obj.quadrotors based on obj.topology
             obj.loadDefaultControllerGains(); % based on the neighbor connections, load some controller gains
 
@@ -55,11 +53,14 @@ classdef Formation < handle
                 obj.quadrotors(i).outNeighbors = obj.topology.outNeighbors{i};
 
                 desiredSeperations = []; % store d_ij values
+                ds = [];
                 for j = 1:1:obj.numOfQuadrotors
                     d_ij = obj.quadrotors(i).desiredSeparation - obj.quadrotors(j).desiredSeparation;
                     desiredSeperations = [desiredSeperations, d_ij];
                 end
+                ds = [ds, obj.quadrotors(i).desiredSeparation];
                 obj.quadrotors(i).desiredSeparations = desiredSeperations;
+                obj.quadrotors(i).ds = ds;
             end
         end
 
@@ -129,7 +130,7 @@ classdef Formation < handle
             figure(figNum); hold on; 
 
             % Draw quadrotors
-            for i = 1:1:obj.numOfQuadrotors
+            for i = 2:1:obj.numOfQuadrotors
                 obj.quadrotors(i).drawQuadrotor(figNum);
             end
             
@@ -155,12 +156,24 @@ classdef Formation < handle
                 startQuadrotorIndex = obj.topology.startNodes(i);
                 endQuadrotorIndex = obj.topology.endNodes(i);
 
+                if startQuadrotorIndex == 1
+                    continue;
+                end
+
                 startPos = obj.quadrotors(startQuadrotorIndex).states(1:3); 
                 endPos = obj.quadrotors(endQuadrotorIndex).states(1:3);
                 midPos = (startPos + endPos)/2;
+                
+                % midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); 
+                % midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate
+                if abs(startPos(1)-endPos(1)) <= 0.05
+                    midPointHeight = -2.5*sign(startPos(2)-endPos(2)); 
+                    midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate when it is parallel in x-axis
+                else
+                    midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); 
+                    midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate when it is not parallel in x-axis
+                end
 
-                midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); % +1*(startPos(1)-endPos(1))
-                midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate
                 midPos = [midPos(1:2); midPointZ];
                 
                 % Plotting the 3D Spline to represent the links
@@ -171,7 +184,7 @@ classdef Formation < handle
                 % Plotting the arrowHead (we draw the arrowhead based on spatial geometry)
                 % The plane is constructed by P1: startPos, P2: endPos, P3: midPos.
                 P1_P3 = midPos - startPos;  % Vector 1 in the (P1,P2,P3) plane
-                P1_P2 = endPos - startPos;  % Vector 2 in the (P1,P2,P3) plane
+                P1_P2 = endPos - startPos + [eps, eps, eps]';  % Vector 2 in the (P1,P2,P3) plane
                 P1_P2_normalized = P1_P2/norm(P1_P2);
                 n1 = (hatmap(P1_P3)*P1_P2)/norm(hatmap(P1_P3)*P1_P2);   % The normal direction of the (P1,P2,P3) plane.
                 n2 = null([n1'; P1_P2']);   % The normal direction of the P1_P2 in the (P1,P2,P3) plane.
@@ -202,7 +215,7 @@ classdef Formation < handle
             figure(figNum); hold on; 
                         
             % Redraw quadrotors
-            for i = 1:1:obj.numOfQuadrotors
+            for i = 2:1:obj.numOfQuadrotors
                 obj.quadrotors(i).redrawQuadrotor(figNum);
             end
             
@@ -226,52 +239,59 @@ classdef Formation < handle
 
             % Count the number of edges by counting the size of the start nodes' set
             numOfLinks = length(obj.topology.startNodes);  
-            
-            for i = 1:1:numOfLinks
-                % if ~isempty(obj.graphics1(i))
-                %     delete(obj.graphics1(i));
-                %     delete(obj.graphics2(i));
-                
-                    % Redraw a link
-                    startQuadrotorIndex = obj.topology.startNodes(i);
-                    endQuadrotorIndex = obj.topology.endNodes(i);
+            for i = 1:1:numOfLinks                   
+                % Redraw a link
+                startQuadrotorIndex = obj.topology.startNodes(i);
+                endQuadrotorIndex = obj.topology.endNodes(i);
+
+                if startQuadrotorIndex == 1
+                    continue;
+                end
                     
-                    startPos = obj.quadrotors(startQuadrotorIndex).states(1:3); 
-                    endPos = obj.quadrotors(endQuadrotorIndex).states(1:3);
-                    midPos = (startPos + endPos)/2;
+                startPos = obj.quadrotors(startQuadrotorIndex).states(1:3); 
+                endPos = obj.quadrotors(endQuadrotorIndex).states(1:3);
+                midPos = (startPos + endPos)/2;
+
+                if abs(startPos(1)-endPos(1)) <= 0.05
+                    midPointHeight = -2.5*sign(startPos(2)-endPos(2)); 
+                    midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate when it is parallel in x-axis
+                else
+                    midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); 
+                    midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate when it is not parallel in x-axis
+                end
+                   
+                % midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); % +1*(startPos(1)-endPos(1))
+                % midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate
+                midPos = [midPos(1:2); midPointZ];
                     
-                    midPointHeight = -2.5*sign(startPos(1)-endPos(1))+0.05*abs(startPos(1)-endPos(1)); % +1*(startPos(1)-endPos(1))
-                    midPointZ = midPos(3)+midPointHeight;   % Adjust the middle point's Z-coordinate
-                    midPos = [midPos(1:2); midPointZ];
-                    
-                    % Plotting the 3D Spline to represent the links
-                    linkPoints = [startPos, midPos, endPos];
-                    h = fnplt(cscvn(linkPoints));
-                    obj.graphics1(i) = plot3(h(1,:),h(2,:),h(3,:),'-b');
+                % Plotting the 3D Spline to represent the links
+                linkPoints = [startPos, midPos, endPos];
+                h = fnplt(cscvn(linkPoints));
+                obj.graphics1(i) = plot3(h(1,:),h(2,:),h(3,:),'-b');
 
-                    % Plotting the arrowHead (we draw the arrowhead based on spatial geometry)
-                    % The plane is constructed by P1: startPos, P2: endPos, P3: midPos.
-                    P1_P3 = midPos - startPos;  % Vector 1 in the (P1,P2,P3) plane
-                    P1_P2 = endPos - startPos;  % Vector 2 in the (P1,P2,P3) plane
-                    P1_P2_normalized = P1_P2/norm(P1_P2);
-                    n1 = (hatmap(P1_P3)*P1_P2)/norm(hatmap(P1_P3)*P1_P2);   % The normal direction of the (P1,P2,P3) plane.
-                    n2 = null([n1'; P1_P2']);   % The normal direction of the P1_P2 in the (P1,P2,P3) plane.
-                    n2 = n2/norm(n2);   % We normalize this vector.
+                % Plotting the arrowHead (we draw the arrowhead based on spatial geometry)
+                % The plane is constructed by P1: startPos, P2: endPos, P3: midPos.
+                P1_P3 = midPos - startPos;  % Vector 1 in the (P1,P2,P3) plane
+                P1_P2 = endPos - startPos + [eps eps eps]';  % Vector 2 in the (P1,P2,P3) plane
+                P1_P2_normalized = P1_P2/norm(P1_P2);
+                n1 = (hatmap(P1_P3)*P1_P2)/norm(hatmap(P1_P3)*P1_P2);   % The normal direction of the (P1,P2,P3) plane.
+                n2 = null([n1'; P1_P2']);   % The normal direction of the P1_P2 in the (P1,P2,P3) plane.
+                n2 = n2/norm(n2);   % We normalize this vector.
 
-                    % Now, we construct the main axis of the arrowhead
-                    polySize = 0.3;
-                    arrowhead_P1 = midPos+polySize*P1_P2_normalized;   % Compute the coordinate of the 1st point of the arrowhead.
+                % Now, we construct the main axis of the arrowhead
+                polySize = 0.3;
+                arrowhead_P1 = midPos+polySize*P1_P2_normalized;   % Compute the coordinate of the 1st point of the arrowhead.
 
-                    % Then, we construct the normal axis of the main axis of the arrowhead
-                    P4 = midPos-0.5*polySize*P1_P2_normalized;
-                    arrowhead_P2 = P4+0.5*polySize*n2;    % Compute the coordinate of the 2nd point of the arrowhead.
-                    arrowhead_P3 = P4-0.5*polySize*n2;    % Compute the coordinate of the 3rd point of the arrowhead.
+                % Then, we construct the normal axis of the main axis of the arrowhead
+                P4 = midPos-0.5*polySize*P1_P2_normalized;
+                arrowhead_P2 = P4+0.5*polySize*n2;    % Compute the coordinate of the 2nd point of the arrowhead.
+                arrowhead_P3 = P4-0.5*polySize*n2;    % Compute the coordinate of the 3rd point of the arrowhead.
 
-                    polyVert = [arrowhead_P1'; 
-                                arrowhead_P2';
-                                arrowhead_P3'];
-                    polyFace = [1, 2, 3];
-                    obj.graphics2(i) = patch('Faces',polyFace,'Vertices',polyVert,'FaceColor','blue','FaceAlpha',0.5);
+                polyVert = [arrowhead_P1'; 
+                            arrowhead_P2';
+                            arrowhead_P3'];
+                polyFace = [1, 2, 3];
+                obj.graphics2(i) = patch('Faces',polyFace,'Vertices',polyVert,'FaceColor','blue','FaceAlpha',0.5);
                 % end
             end            
         end
@@ -288,10 +308,10 @@ classdef Formation < handle
 
 
         %% Compute the tracking errors from the bottom Quadrotor layer to this Formation layer (quadrotor network paper)
-        function outputArg = computeFormationErrors2Part1(obj, t, tMax)
+        function outputArg = computeFormationErrors2Part1(obj, t, tMax, isPlatoon)
             leaderStates = obj.quadrotors(1).states;  % x_d, v_d (6 dimensions)
             for i = 2:1:obj.numOfQuadrotors
-                obj.quadrotors(i).computeQuadrotorErrors2Part1(leaderStates, t, tMax);
+                obj.quadrotors(i).computeQuadrotorErrors2Part1(leaderStates, t, tMax, isPlatoon);
             end
         end        
 
@@ -356,7 +376,8 @@ classdef Formation < handle
 
         %% Robust Controller Synthesis Using Error Dynamics Formulation II With sMS Constraints
         % Decentralized Robust Controller Synthesis With sMS Constraints (Error Dynamics Formulation II)
-        function status = decentralizedRobustControllerSynthesissMS2(obj, pVals)
+        % function status = decentralizedRobustControllerSynthesissMS2(obj, pVals)
+        function status = decentralizedRobustControllerSynthesissMS2(obj)
             displayMasseges = 1;
             N = length(obj.quadrotors)-1;
             indexing = 1:1:N; % Lets use the default indexin scheme
@@ -366,7 +387,8 @@ classdef Formation < handle
             for i = 1:1:length(indexing)
                 iInd = indexing(i);
                 previousSubsystems = indexing(1:i-1);      
-                [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL,LVal] = obj.quadrotors(iInd+1).robustControllerSynthesissMS2(previousSubsystems, obj.quadrotors, pVals(iInd), displayMasseges, isSoft);
+                % [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL,LVal] = obj.quadrotors(iInd+1).robustControllerSynthesissMS2(previousSubsystems, obj.quadrotors, pVals(iInd), displayMasseges, isSoft);
+                [isRobustStabilizable,K_ii,K_ijVals,K_jiVals,gammaSq_iVal,statusL,LVal] = obj.quadrotors(iInd+1).robustControllerSynthesissMS2(previousSubsystems, obj.quadrotors, displayMasseges, isSoft);
                 
                 % Collect the K_{ii} value into the K matrix
                 K{iInd,iInd} = K_ii;
